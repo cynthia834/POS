@@ -33,7 +33,7 @@ Since this is a fresh setup, you will need the following installed on your machi
 
 ## How to Run the Backend
 
-*Note: Since PHP and Composer were not detected on your system, the backend directory contains the architectural logic files but does not include the full vendor dependencies or base Laravel bootstrap files.*
+*Note: Since PHP and Composer were not detected on the  system, the backend directory contains the architectural logic files but does not include the full vendor dependencies or base Laravel bootstrap files.*
 
 To fully initialize the Laravel backend on a machine with PHP:
 1. Run `composer create-project laravel/laravel new-backend` to generate a base Laravel project.
