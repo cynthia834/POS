@@ -2903,9 +2903,38 @@ ${listItemsStr}
         }
 
         // =======================================================
+        // ================= SYNC PRODUCTS FROM DB ================
+        // =======================================================
+        async function fetchBackendProducts() {
+            try {
+                const response = await fetch('/api/v1/products');
+                if (!response.ok) throw new Error('Failed to fetch products');
+                const products = await response.json();
+                
+                // Clear the mock itemsDatabase and replace with database items
+                itemsDatabase.length = 0; 
+                products.forEach(p => {
+                    itemsDatabase.push({
+                        id: p.id,
+                        name: p.name,
+                        barcode: p.barcode,
+                        category: p.category,
+                        price: parseFloat(p.price),
+                        stock: parseInt(p.stock || 0),
+                        status: p.stock > 10 ? 'In Stock' : (p.stock > 0 ? 'Low Stock' : 'Out of Stock')
+                    });
+                });
+            } catch (err) {
+                console.error("Error loading products from database:", err);
+                showToast("DB Sync Failed", "Could not load products from database. Showing offline catalog.");
+            }
+        }
+
+        // =======================================================
         // ================= INITIALIZE DASHBOARD ================
         // =======================================================
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
+            await fetchBackendProducts();
             renderRecentTransactionsTable();
             updateKPIMetrics();
             renderInventorySummary();

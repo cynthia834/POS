@@ -13,6 +13,7 @@ Route::get('/user', function (Request $request) {
 Route::get('/v1/products/lookup/{barcode}', [ProductController::class, 'lookup']);
 Route::get('/v1/products', [ProductController::class, 'index']);
 Route::post('/v1/products', [ProductController::class, 'store']);
+Route::put('/v1/products/{product}', [ProductController::class, 'update']);
 Route::post('/v1/products/{product}/restock', [ProductController::class, 'restock']);
 Route::post('/v1/webhooks/mpesa', [WebhookController::class, 'handleMpesaWebhook']);
 Route::post('/v1/checkout', [CheckoutController::class, 'processCheckout']);

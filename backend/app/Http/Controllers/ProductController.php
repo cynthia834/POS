@@ -124,4 +124,55 @@ class ProductController extends Controller
             'product' => $product
         ]);
     }
+
+    public function update(Request $request, Product $product)
+    {
+        $request->validate([
+            'name' => 'required|string',
+            'barcode' => 'required|string|unique:products,barcode,' . $product->id,
+            'price' => 'required|numeric|min:0',
+            'category' => 'required|string',
+            'image_url' => 'nullable|string',
+            'stock' => 'nullable|integer|min:0'
+        ]);
+
+        $product->update([
+            'name' => $request->name,
+            'barcode' => $request->barcode,
+            'price' => $request->price,
+            'category' => $request->category,
+            'image_url' => $request->image_url
+        ]);
+
+        if ($request->has('stock')) {
+            $variant = $product->stockVariants()->first();
+            if ($variant) {
+                $batch = $variant->batches()->first();
+                if ($batch) {
+                    $batch->update(['quantity' => $request->stock]);
+                } else {
+                    Batch::create([
+                        'stock_variant_id' => $variant->id,
+                        'quantity' => $request->stock,
+                        'expiration_date' => now()->addDays(30)->toDateString()
+                    ]);
+                }
+            }
+        }
+
+        $product->load('stockVariants.batches');
+        $totalStock = 0;
+        foreach ($product->stockVariants as $v) {
+            $totalStock += $v->batches->sum('quantity');
+        }
+        $product->stock = $totalStock;
+
+        // Clear cache
+        Cache::forget('product_' . $product->barcode);
+
+        return response()->json([
+            'success' => true,
+            'product' => $product
+        ]);
+    }
 }
