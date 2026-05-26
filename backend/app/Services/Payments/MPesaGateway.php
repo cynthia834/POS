@@ -43,8 +43,9 @@ class MPesaGateway implements PaymentGatewayInterface
         }
 
         $formattedPhone = $this->formatPhoneNumber($phone);
+        $useMock = ($data['simulate'] ?? false) && app()->environment('testing');
 
-        if (empty($this->consumerKey) || empty($this->consumerSecret)) {
+        if ($useMock) {
             $mockCheckoutRequestId = 'ws_CO_' . date('dmYHis') . '_' . rand(100, 999);
             $payment = $order->payments()->create([
                 'amount' => $amount,
@@ -60,10 +61,14 @@ class MPesaGateway implements PaymentGatewayInterface
                     'MerchantRequestID' => 'mock_merchant_id',
                     'CheckoutRequestID' => $mockCheckoutRequestId,
                     'ResponseCode' => '0',
-                    'ResponseDescription' => 'Mock STK Push initiated successfully (Keys missing)',
-                    'CustomerMessage' => 'Mock STK Push initiated successfully (Keys missing)'
-                ]
+                    'ResponseDescription' => 'Mock STK Push initiated successfully',
+                    'CustomerMessage' => 'Mock STK Push initiated successfully',
+                ],
             ];
+        }
+
+        if (empty($this->consumerKey) || empty($this->consumerSecret)) {
+            throw new Exception('M-Pesa API credentials are not configured. Cannot send STK push to customer phone.');
         }
 
         // 1. Generate access token
@@ -157,5 +162,58 @@ class MPesaGateway implements PaymentGatewayInterface
         }
 
         return $phone;
+    }
+
+    /**
+     * Query Daraja for STK status and update the payment record (fallback when webhook is unreachable).
+     */
+    public function queryAndSyncPayment(Payment $payment): string
+    {
+        if ($payment->status !== 'pending' || empty($payment->checkout_request_id)) {
+            return $payment->status;
+        }
+
+        if (empty($this->consumerKey) || empty($this->consumerSecret)) {
+            return $payment->status;
+        }
+
+        try {
+            $accessToken = $this->generateAccessToken();
+            $timestamp = date('YmdHis');
+            $password = base64_encode($this->shortcode . $this->passkey . $timestamp);
+
+            $response = Http::withToken($accessToken)
+                ->post($this->baseUrl . '/mpesa/stkpushquery/v1/query', [
+                    'BusinessShortCode' => $this->shortcode,
+                    'Password' => $password,
+                    'Timestamp' => $timestamp,
+                    'CheckoutRequestID' => $payment->checkout_request_id,
+                ]);
+
+            if (!$response->successful()) {
+                Log::warning('M-Pesa STK Query HTTP error', [
+                    'payment_id' => $payment->id,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return $payment->status;
+            }
+
+            $data = $response->json();
+            $handler = new MpesaStkResultHandler();
+
+            return $handler->apply(
+                $payment->fresh(),
+                $data['ResultCode'] ?? null,
+                $data['ResultDesc'] ?? '',
+                null
+            );
+        } catch (Exception $e) {
+            Log::warning('M-Pesa STK Query exception', [
+                'payment_id' => $payment->id,
+                'message' => $e->getMessage(),
+            ]);
+            return $payment->status;
+        }
     }
 }

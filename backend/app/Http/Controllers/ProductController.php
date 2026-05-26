@@ -16,10 +16,16 @@ class ProductController extends Controller
         
         $products->map(function ($product) {
             $totalStock = 0;
+            $oldestExpiry = null;
             foreach ($product->stockVariants as $variant) {
                 $totalStock += $variant->batches->sum('quantity');
+                $batch = $variant->batches->where('quantity', '>', 0)->whereNotNull('expiration_date')->sortBy('expiration_date')->first();
+                if ($batch && (!$oldestExpiry || $batch->expiration_date < $oldestExpiry)) {
+                    $oldestExpiry = $batch->expiration_date;
+                }
             }
             $product->stock = $totalStock;
+            $product->expiration_date = $oldestExpiry;
             return $product;
         });
 
@@ -39,10 +45,16 @@ class ProductController extends Controller
 
         // Attach stock to the lookup result too
         $totalStock = 0;
+        $oldestExpiry = null;
         foreach ($product->stockVariants as $variant) {
             $totalStock += $variant->batches->sum('quantity');
+            $batch = $variant->batches->where('quantity', '>', 0)->whereNotNull('expiration_date')->sortBy('expiration_date')->first();
+            if ($batch && (!$oldestExpiry || $batch->expiration_date < $oldestExpiry)) {
+                $oldestExpiry = $batch->expiration_date;
+            }
         }
         $product->stock = $totalStock;
+        $product->expiration_date = $oldestExpiry;
 
         return response()->json($product);
     }
@@ -55,7 +67,8 @@ class ProductController extends Controller
             'price' => 'required|numeric|min:0',
             'category' => 'required|string',
             'stock' => 'required|integer|min:0',
-            'image_url' => 'nullable|string'
+            'image_url' => 'nullable|string',
+            'expiration_date' => 'nullable|date'
         ]);
 
         $product = Product::create([
@@ -76,11 +89,12 @@ class ProductController extends Controller
         Batch::create([
             'stock_variant_id' => $variant->id,
             'quantity' => $request->stock,
-            'expiration_date' => now()->addDays(30)->toDateString()
+            'expiration_date' => $request->expiration_date ?: now()->addDays(30)->toDateString()
         ]);
 
         $product->load('stockVariants.batches');
         $product->stock = $request->stock;
+        $product->expiration_date = $request->expiration_date ?: now()->addDays(30)->toDateString();
 
         // Clear any barcode lookup cache to be safe
         Cache::forget('product_' . $product->barcode);
@@ -101,20 +115,27 @@ class ProductController extends Controller
         }
 
         $quantity = $request->input('quantity', 30);
+        $expiry = $request->input('expiration_date') ?: now()->addDays(30)->toDateString();
 
         Batch::create([
             'stock_variant_id' => $variant->id,
             'quantity' => $quantity,
-            'expiration_date' => now()->addDays(30)->toDateString()
+            'expiration_date' => $expiry
         ]);
 
         $product->load('stockVariants.batches');
         
         $totalStock = 0;
+        $oldestExpiry = null;
         foreach ($product->stockVariants as $v) {
             $totalStock += $v->batches->sum('quantity');
+            $batch = $v->batches->where('quantity', '>', 0)->whereNotNull('expiration_date')->sortBy('expiration_date')->first();
+            if ($batch && (!$oldestExpiry || $batch->expiration_date < $oldestExpiry)) {
+                $oldestExpiry = $batch->expiration_date;
+            }
         }
         $product->stock = $totalStock;
+        $product->expiration_date = $oldestExpiry;
 
         // Clear cache
         Cache::forget('product_' . $product->barcode);
@@ -133,7 +154,8 @@ class ProductController extends Controller
             'price' => 'required|numeric|min:0',
             'category' => 'required|string',
             'image_url' => 'nullable|string',
-            'stock' => 'nullable|integer|min:0'
+            'stock' => 'nullable|integer|min:0',
+            'expiration_date' => 'nullable|date'
         ]);
 
         $product->update([
@@ -144,28 +166,42 @@ class ProductController extends Controller
             'image_url' => $request->image_url
         ]);
 
-        if ($request->has('stock')) {
-            $variant = $product->stockVariants()->first();
-            if ($variant) {
-                $batch = $variant->batches()->first();
-                if ($batch) {
-                    $batch->update(['quantity' => $request->stock]);
-                } else {
-                    Batch::create([
-                        'stock_variant_id' => $variant->id,
-                        'quantity' => $request->stock,
-                        'expiration_date' => now()->addDays(30)->toDateString()
-                    ]);
+        $variant = $product->stockVariants()->first();
+        if ($variant) {
+            $batch = $variant->batches()->first();
+            $dataToUpdate = [];
+            if ($request->has('stock')) {
+                $dataToUpdate['quantity'] = $request->stock;
+            }
+            if ($request->has('expiration_date') && $request->expiration_date) {
+                $dataToUpdate['expiration_date'] = $request->expiration_date;
+            }
+            
+            if ($batch) {
+                if (!empty($dataToUpdate)) {
+                    $batch->update($dataToUpdate);
                 }
+            } else {
+                Batch::create([
+                    'stock_variant_id' => $variant->id,
+                    'quantity' => $request->input('stock', 0),
+                    'expiration_date' => $request->input('expiration_date') ?: now()->addDays(30)->toDateString()
+                ]);
             }
         }
 
         $product->load('stockVariants.batches');
         $totalStock = 0;
+        $oldestExpiry = null;
         foreach ($product->stockVariants as $v) {
             $totalStock += $v->batches->sum('quantity');
+            $batch = $v->batches->where('quantity', '>', 0)->whereNotNull('expiration_date')->sortBy('expiration_date')->first();
+            if ($batch && (!$oldestExpiry || $batch->expiration_date < $oldestExpiry)) {
+                $oldestExpiry = $batch->expiration_date;
+            }
         }
         $product->stock = $totalStock;
+        $product->expiration_date = $oldestExpiry;
 
         // Clear cache
         Cache::forget('product_' . $product->barcode);

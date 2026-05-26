@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\Payment;
-use App\Models\Order;
+use App\Services\Payments\MpesaStkResultHandler;
 
 class WebhookController extends Controller
 {
@@ -50,44 +50,17 @@ class WebhookController extends Controller
             ]);
         }
 
-        if ($resultCode == 0) {
-            // Success
-            $metadata = $stkCallback['CallbackMetadata']['Item'] ?? [];
-            $receiptNumber = null;
-            
-            foreach ($metadata as $item) {
-                if (($item['Name'] ?? '') === 'MpesaReceiptNumber') {
-                    $receiptNumber = $item['Value'] ?? null;
-                    break;
-                }
-            }
+        $metadata = $stkCallback['CallbackMetadata']['Item'] ?? [];
+        $receiptNumber = null;
 
-            $payment->update([
-                'status' => 'completed',
-                'transaction_id' => $receiptNumber,
-            ]);
-
-            // Update polymorphic parent (Order) to 'Paid'
-            $order = $payment->payable;
-            if ($order instanceof Order) {
-                $order->update(['status' => 'Paid']);
-                Log::info('M-Pesa Webhook: Payment completed successfully', [
-                    'payment_id' => $payment->id,
-                    'order_id' => $order->id,
-                    'receipt' => $receiptNumber
-                ]);
+        foreach ($metadata as $item) {
+            if (($item['Name'] ?? '') === 'MpesaReceiptNumber') {
+                $receiptNumber = $item['Value'] ?? null;
+                break;
             }
-        } else {
-            // Failed (e.g. user cancelled, insufficient funds, etc.)
-            $payment->update([
-                'status' => 'failed',
-            ]);
-            Log::info('M-Pesa Webhook: Payment failed', [
-                'payment_id' => $payment->id,
-                'result_code' => $resultCode,
-                'result_desc' => $resultDesc
-            ]);
         }
+
+        app(MpesaStkResultHandler::class)->apply($payment, $resultCode, $resultDesc, $receiptNumber);
 
         return response()->json([
             'ResultCode' => 0,

@@ -1,13 +1,28 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex POS Redirecting...</title>
+    <script>
+        (function () {
+            const token = localStorage.getItem('pos_token');
+            const role = localStorage.getItem('pos_role');
+            if (!token) {
+                window.location.replace('./login.html');
+            } else {
+                if (role === 'admin') {
+                    window.location.replace('./admin.html');
+                } else {
+                    window.location.replace('./pos.html');
+                }
+            }
+        })();
+    </script>
+</head>
+<body style="background-color: #0a0a0a; color: #ffffff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+    <div style="text-align: center;">
+        <p style="font-size: 1.125rem; font-weight: 600; color: #a3a3a3;">Redirecting to Apex POS...</p>
+    </div>
+</body>
 </html>

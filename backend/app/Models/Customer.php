@@ -2,10 +2,15 @@
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 class Customer extends Model {
-    protected $fillable = ['name', 'phone', 'points_balance'];
+    protected $fillable = ['name', 'phone', 'email', 'points_balance'];
+    protected $appends = ['tier'];
 
     public function pointTransactions() {
         return $this->hasMany(PointTransaction::class);
+    }
+
+    public function orders() {
+        return $this->hasMany(Order::class);
     }
 
     public function getTierAttribute() {

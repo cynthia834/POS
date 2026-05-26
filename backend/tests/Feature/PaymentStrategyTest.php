@@ -202,7 +202,7 @@ class PaymentStrategyTest extends TestCase
         $batch = \App\Models\Batch::create([
             'stock_variant_id' => $variant->id,
             'quantity' => 10,
-            'expiration_date' => '2026-06-01',
+            'expiration_date' => now()->addYear()->toDateString(),
             'created_at' => now(),
         ]);
 
@@ -243,6 +243,55 @@ class PaymentStrategyTest extends TestCase
     }
 
     /** @test */
+    public function checkout_via_mpesa_with_simulation_flag_returns_mock_payment_instantly()
+    {
+        $product = \App\Models\Product::create([
+            'name' => 'MPesa Sim Product',
+            'barcode' => '99998888',
+            'price' => 75.00,
+        ]);
+        $variant = \App\Models\StockVariant::create([
+            'product_id' => $product->id,
+            'unit' => 'Piece',
+            'conversion_rate' => 1.00,
+            'sku' => 'MSP-PC',
+        ]);
+        $batch = \App\Models\Batch::create([
+            'stock_variant_id' => $variant->id,
+            'quantity' => 10,
+            'expiration_date' => now()->addYear()->toDateString(),
+            'created_at' => now(),
+        ]);
+
+        $payload = [
+            'payment_method' => 'mpesa',
+            'phone_number' => '0712345678',
+            'simulate' => true,
+            'cart' => [
+                'items' => [
+                    [
+                        'id' => $product->id,
+                        'qty' => 2,
+                        'price' => 75.00,
+                    ]
+                ]
+            ]
+        ];
+
+        $response = $this->postJson('/api/v1/checkout', $payload);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'status' => 'Pending'
+            ]);
+
+        $payment = Payment::find($response->json('payment.id'));
+        $this->assertEquals('pending', $payment->status);
+        $this->assertStringStartsWith('ws_CO_', $payment->checkout_request_id);
+    }
+
+    /** @test */
     public function checkout_via_mpesa_initiates_payment_and_status_checks()
     {
         // Mock Safaricom APIs
@@ -274,7 +323,7 @@ class PaymentStrategyTest extends TestCase
         $batch = \App\Models\Batch::create([
             'stock_variant_id' => $variant->id,
             'quantity' => 10,
-            'expiration_date' => '2026-06-01',
+            'expiration_date' => now()->addYear()->toDateString(),
             'created_at' => now(),
         ]);
 

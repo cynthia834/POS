@@ -9,6 +9,8 @@ use App\Models\Payment;
 use App\Discounts\ApplyBogoDiscounts;
 use App\Discounts\ApplyHappyHourRates;
 use App\Discounts\ApplyMemberDiscounts;
+use App\Discounts\ApplySeasonalDiscounts;
+use App\Discounts\ApplyMarkdownDiscounts;
 
 class CheckoutController extends Controller {
     public function calculate(Request $request) {
@@ -20,8 +22,16 @@ class CheckoutController extends Controller {
         if ($customerId) {
             $customer = Customer::find($customerId);
         }
-        
-        $cart = new Cart($items, $customer);
+
+        $mappedItems = array_map(function ($item) {
+            return [
+                'id' => $item['id'],
+                'quantity' => $item['qty'] ?? $item['quantity'] ?? 0,
+                'price' => $item['price'],
+            ];
+        }, $items);
+
+        $cart = new Cart($mappedItems, $customer);
         
         $cart = app(Pipeline::class)
             ->send($cart)
@@ -29,6 +39,8 @@ class CheckoutController extends Controller {
                 ApplyBogoDiscounts::class,
                 ApplyHappyHourRates::class,
                 ApplyMemberDiscounts::class,
+                ApplySeasonalDiscounts::class,
+                ApplyMarkdownDiscounts::class,
             ])
             ->thenReturn();
             
@@ -72,6 +84,8 @@ class CheckoutController extends Controller {
                 ApplyBogoDiscounts::class,
                 ApplyHappyHourRates::class,
                 ApplyMemberDiscounts::class,
+                ApplySeasonalDiscounts::class,
+                ApplyMarkdownDiscounts::class,
             ])
             ->thenReturn();
 
@@ -79,6 +93,7 @@ class CheckoutController extends Controller {
         $order = Order::create([
             'status' => 'Pending',
             'total_amount' => $cart->total,
+            'customer_id' => $customer ? $customer->id : null,
         ]);
 
         // 3. Create the OrderLineItems
@@ -141,7 +156,8 @@ class CheckoutController extends Controller {
             } else if ($paymentMethod === 'mpesa') {
                 $gateway = new \App\Services\Payments\MPesaGateway();
                 $result = $gateway->charge($order, $cart->total, [
-                    'phone_number' => $phoneNumber
+                    'phone_number' => $phoneNumber,
+                    'simulate' => $request->boolean('simulate')
                 ]);
                 
                 return response()->json([
@@ -164,18 +180,122 @@ class CheckoutController extends Controller {
         return response()->json(['success' => false, 'message' => 'Invalid payment method'], 400);
     }
 
-    public function checkStatus($paymentId) {
-        $payment = Payment::find($paymentId);
-        if (!$payment) {
-            return response()->json(['error' => 'Payment record not found'], 404);
+    public function checkStatus(Payment $payment) {
+        if ($payment->payment_method === 'mpesa' && $payment->status === 'pending' && $payment->checkout_request_id) {
+            $gateway = new \App\Services\Payments\MPesaGateway();
+            $gateway->queryAndSyncPayment($payment);
+            $payment->refresh();
         }
 
         return response()->json([
             'payment_id' => $payment->id,
             'status' => $payment->status,
             'transaction_id' => $payment->transaction_id,
+            'checkout_request_id' => $payment->checkout_request_id,
             'order_id' => $payment->payable_id,
             'order_status' => $payment->payable ? $payment->payable->status : null,
         ]);
+    }
+
+    /**
+     * Abort a pending M-Pesa STK push (customer did not enter PIN or cashier cancelled).
+     */
+    public function abortMpesaPayment(Request $request, Payment $payment)
+    {
+        if ($payment->payment_method !== 'mpesa' || $payment->status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only pending M-Pesa payments can be aborted.',
+            ], 400);
+        }
+
+        $payment->update(['status' => 'failed']);
+
+        $order = $payment->payable;
+        if ($order instanceof Order) {
+            $order->update(['status' => 'Cancelled']);
+        }
+
+        return response()->json([
+            'success' => true,
+            'payment_id' => $payment->id,
+            'status' => 'failed',
+            'order_id' => $payment->payable_id,
+            'order_status' => $order ? $order->status : null,
+            'message' => $request->input('reason', 'STK push aborted'),
+        ]);
+    }
+
+    /**
+     * Complete a pending M-Pesa payment (automated tests only).
+     */
+    public function simulateMpesaComplete(Request $request, Payment $payment)
+    {
+        if (!app()->environment('testing')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Simulated completion is only available in the test environment.',
+            ], 403);
+        }
+
+        if ($payment->payment_method !== 'mpesa' || $payment->status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only pending M-Pesa payments can be simulated.',
+            ], 400);
+        }
+
+        if (!$payment->checkout_request_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment is missing a checkout request ID.',
+            ], 400);
+        }
+
+        $request->validate([
+            'pin' => 'nullable|string|size:4',
+        ]);
+
+        $receipt = 'SIM' . strtoupper(substr(md5($payment->id . microtime()), 0, 8));
+
+        $callbackPayload = [
+            'Body' => [
+                'stkCallback' => [
+                    'MerchantRequestID' => 'mock_merchant_id',
+                    'CheckoutRequestID' => $payment->checkout_request_id,
+                    'ResultCode' => 0,
+                    'ResultDesc' => 'The service request is processed successfully.',
+                    'CallbackMetadata' => [
+                        'Item' => [
+                            ['Name' => 'Amount', 'Value' => (float) $payment->amount],
+                            ['Name' => 'MpesaReceiptNumber', 'Value' => $receipt],
+                            ['Name' => 'PhoneNumber', 'Value' => (int) ($payment->phone_number ?? '254700000000')],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        app(WebhookController::class)->handleMpesaWebhook(new Request($callbackPayload));
+
+        $payment->refresh();
+
+        return response()->json([
+            'success' => true,
+            'payment_id' => $payment->id,
+            'status' => $payment->status,
+            'transaction_id' => $payment->transaction_id,
+            'receipt' => $receipt,
+            'order_id' => $payment->payable_id,
+            'order_status' => $payment->payable ? $payment->payable->status : null,
+        ]);
+    }
+
+    public function listOrders(Request $request) {
+        $orders = Order::with(['items.product', 'payments'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
+        return response()->json($orders);
     }
 }

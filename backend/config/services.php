@@ -40,7 +40,7 @@ return [
         'consumer_secret' => env('MPESA_CONSUMER_SECRET'),
         'shortcode' => env('MPESA_SHORTCODE', '174379'),
         'passkey' => env('MPESA_PASSKEY', 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919'),
-        'callback_url' => env('MPESA_CALLBACK_URL', 'http://localhost/api/v1/webhooks/mpesa'),
+        'callback_url' => env('MPESA_CALLBACK_URL', env('APP_URL', 'http://127.0.0.1:8000') . '/api/v1/webhooks/mpesa'),
         'env' => env('MPESA_ENV', 'sandbox'),
     ],
 

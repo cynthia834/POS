@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex POS - Login</title>
+    <meta name="description" content="Secure login portal for Apex Point of Sale system. Admin dashboard and cashier terminal access.">
+    
+    <!-- Auth Guard Check: Run immediately before page rendering to prevent flashes of content -->
+    <script>
+        (function () {
+            const token = localStorage.getItem('pos_token');
+            const role = localStorage.getItem('pos_role');
+            const path = window.location.pathname;
+
+            // Determine current page status
+            const isLoginPage = path.includes('login.html');
+            const isIndexPage = path.endsWith('/') || path.includes('index.html');
+
+            // Determine redirect prefix if we are on file:// protocol
+            const isFile = window.location.protocol === 'file:';
+            
+            // Under file protocol, paths need to be relative to the folder they are in.
+            // If we are at root d:\POS\admin.html, frontend files are in frontend/
+            const prefix = (isFile && !path.includes('/frontend/')) ? './frontend/' : './';
+
+            if (!token) {
+                // If there is no token, redirect to login.html if not already there
+                if (!isLoginPage) {
+                    window.location.href = prefix + 'login.html';
+                }
+            } else {
+                // If there is a token, check for role restrictions or redirect from entry pages
+                if (isLoginPage || isIndexPage) {
+                    if (role === 'admin') {
+                        window.location.href = prefix + 'admin.html';
+                    } else {
+                        window.location.href = prefix + 'pos.html';
+                    }
+                } else if (path.includes('admin.html') && role !== 'admin') {
+                    window.location.href = prefix + 'pos.html';
+                } else if (path.includes('pos.html') && role === 'admin') {
+                    // Note: Cashiers default to pos.html. If admin is visiting pos.html, they get redirected to admin dashboard
+                    window.location.href = prefix + 'admin.html';
+                }
+            }
+        })();
+    </script>
+
+    <!-- Google Fonts: Outfit for Headings, Inter for Body -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS v4 Play CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- Tailwind CSS Customization Block -->
+    <style type="text/tailwindcss">
+        @theme {
+            --font-display: 'Outfit', sans-serif;
+            --font-sans: 'Inter', sans-serif;
+            
+            --color-brand: #e36230;
+            --color-brand-light: #f2855c;
+            --color-brand-dark: #c04517;
+            
+            --color-bg-base: #0b0c0e;
+            --color-bg-card: #14161a;
+            --color-border-card: #212429;
+            
+            --shadow-premium: 0 20px 40px -15px rgba(0, 0, 0, 0.8);
+            --shadow-glow: 0 0 25px rgba(227, 98, 48, 0.08);
+        }
+
+        body {
+            background-image: linear-gradient(rgba(11, 12, 14, 0.5), rgba(11, 12, 14, 0.5)), url('background.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
+
+        /* Glassmorphism utility card */
+        .glass-card {
+            background: rgba(20, 22, 26, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(42, 45, 53, 0.8);
+        }
+    </style>
+</head>
+<body class="h-full bg-bg-base text-neutral-200 font-sans antialiased overflow-hidden flex items-center justify-center relative selection:bg-brand selection:text-white">
+
+    <!-- Protocol Warning Banner -->
+    <div id="protocol-warning-banner" class="hidden absolute top-0 left-0 right-0 w-full bg-amber-950/90 border-b border-amber-500/30 text-amber-200 px-4 py-3 text-xs text-center font-medium flex items-center justify-center gap-2 z-50 shadow-lg">
+        <i class="ph ph-warning-amber text-base text-amber-400"></i>
+        <span><strong>Local File Mode (Offline Bypass):</strong> Database connection is restricted when opened directly via <code>file://</code>. Please open <a href="http://localhost:5173/login.html" target="_blank" class="underline hover:text-white font-bold text-amber-300">http://localhost:5173/login.html</a> to access your live database products.</span>
+    </div>
+
+    <!-- Decorative Animated Glow Background Blobs -->
+    <div class="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-brand/10 rounded-full blur-3xl pointer-events-none animate-pulse duration-[8000ms]"></div>
+    <div class="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[35rem] h-[35rem] bg-brand-light/5 rounded-full blur-3xl pointer-events-none animate-pulse duration-[12000ms]"></div>
+
+    <!-- Login Container -->
+    <div class="w-full max-w-md px-6 z-10">
+        
+        <!-- Portal Brand Logo -->
+        <div class="flex flex-col items-center mb-8">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand to-brand-light flex items-center justify-center shadow-lg mb-3">
+                <i class="ph ph-lightning text-white text-2xl font-bold"></i>
+            </div>
+            <h1 class="text-3xl font-bold font-display tracking-tight text-white">Apex POS</h1>
+            <p id="portalSubtitle" class="text-neutral-400 text-sm mt-1">Sign in to your point of sale terminal</p>
+        </div>
+
+        <!-- Glassmorphic Login Card -->
+        <div class="glass-card rounded-3xl p-8 shadow-premium relative overflow-hidden">
+            <!-- Alert Container for errors -->
+            <div id="errorAlert" class="hidden mb-6 p-4 rounded-xl bg-red-950/40 border border-red-500/30 text-red-200 text-sm flex items-start gap-3 transition-all duration-300">
+                <i class="ph ph-warning-circle text-lg text-red-400 mt-0.5"></i>
+                <span id="errorMessage" class="flex-1">Invalid credentials. Please try again.</span>
+            </div>
+
+            <!-- Form -->
+            <form id="loginForm" class="space-y-5" onsubmit="handleLogin(event)">
+                <!-- Email Field -->
+                <div>
+                    <label for="email" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-2">Email Address</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                            <i class="ph ph-envelope text-lg"></i>
+                        </span>
+                        <input type="email" id="email" required placeholder="name@company.com" 
+                            class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-3 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                    </div>
+                </div>
+
+                <!-- Password Field -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="password" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider">Password</label>
+                        <button type="button" onclick="toggleForm('forgot')" class="text-brand-light hover:underline text-xs font-semibold cursor-pointer">Forgot Password?</button>
+                    </div>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                            <i class="ph ph-lock text-lg"></i>
+                        </span>
+                        <input type="password" id="password" required placeholder="••••••••" 
+                            class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-3 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" id="submitBtn" 
+                    class="w-full mt-2 bg-gradient-to-r from-brand to-brand-light text-white font-medium py-3 rounded-xl shadow-lg shadow-brand/20 hover:shadow-brand/35 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer text-sm">
+                    <span id="btnText">Sign In</span>
+                    <i id="btnIcon" class="ph ph-arrow-right text-lg"></i>
+                </button>
+
+                <!-- Toggle link -->
+                <div class="text-center mt-4">
+                    <span class="text-neutral-500 text-xs">Don't have an account?</span>
+                    <button type="button" onclick="toggleForm('register')" class="text-brand-light hover:underline text-xs font-semibold ml-1 cursor-pointer">Create Account</button>
+                </div>
+            </form>
+
+            <!-- Register Form (Wizard-based) -->
+            <form id="registerForm" class="hidden space-y-4" onsubmit="event.preventDefault();">
+                <!-- Wizard Progress Indicator -->
+                <div class="flex items-center justify-between px-2 mb-6">
+                    <div class="flex flex-col items-center">
+                        <div id="step1Indicator" class="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-xs font-bold text-white border-2 border-brand transition-all duration-300">1</div>
+                        <span class="text-[10px] text-neutral-300 font-semibold mt-1.5 uppercase tracking-wider">Email</span>
+                    </div>
+                    <div class="flex-1 h-0.5 bg-neutral-800 mx-2 transition-all duration-300" id="stepLine1"></div>
+                    <div class="flex flex-col items-center">
+                        <div id="step2Indicator" class="w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center text-xs font-bold text-neutral-500 border border-border-card transition-all duration-300">2</div>
+                        <span class="text-[10px] text-neutral-500 font-semibold mt-1.5 uppercase tracking-wider">Verify</span>
+                    </div>
+                    <div class="flex-1 h-0.5 bg-neutral-800 mx-2 transition-all duration-300" id="stepLine2"></div>
+                    <div class="flex flex-col items-center">
+                        <div id="step3Indicator" class="w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center text-xs font-bold text-neutral-500 border border-border-card transition-all duration-300">3</div>
+                        <span class="text-[10px] text-neutral-500 font-semibold mt-1.5 uppercase tracking-wider">Profile</span>
+                    </div>
+                </div>
+
+                <!-- STEP 1: Enter Email & Request Code -->
+                <div id="registerStep1" class="space-y-4">
+                    <div>
+                        <label for="regEmail" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">Email Address</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                                <i class="ph ph-envelope text-lg"></i>
+                            </span>
+                            <input type="email" id="regEmail" required placeholder="name@company.com" 
+                                class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                        </div>
+                    </div>
+                    
+                    <button type="button" id="regStep1Btn" onclick="sendVerificationCode()"
+                        class="w-full mt-2 bg-gradient-to-r from-brand to-brand-light text-white font-medium py-3 rounded-xl shadow-lg shadow-brand/20 hover:shadow-brand/35 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer text-sm">
+                        <span id="regStep1BtnText">Send Verification Code</span>
+                        <i id="regStep1BtnIcon" class="ph ph-paper-plane text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- STEP 2: Verify Code -->
+                <div id="registerStep2" class="hidden space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Verifying Email</label>
+                        <div id="regEmailDisplay" class="text-sm font-semibold text-white bg-neutral-900/40 border border-border-card rounded-xl py-2 px-3">email@example.com</div>
+                    </div>
+
+                    <div id="verificationCodeBanner" class="hidden rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-center space-y-1">
+                        <p id="verificationCodeBannerText" class="text-[11px] font-semibold text-amber-200 uppercase tracking-wide">Your verification code</p>
+                        <p id="displayedVerificationCode" class="text-3xl font-bold font-mono tracking-[0.35em] text-amber-300">000000</p>
+                        <p class="text-[10px] text-amber-200/80">Email delivery is not configured — use this code to continue.</p>
+                    </div>
+
+                    <div id="emailSentHint" class="hidden rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-200 text-center">
+                        Code sent to your inbox. Check spam if you do not see it within a minute.
+                    </div>
+
+                    <div>
+                        <label for="regVerificationCode" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">6-Digit Verification Code</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                                <i class="ph ph-key text-lg"></i>
+                            </span>
+                            <input type="text" id="regVerificationCode" required placeholder="123456" pattern="[0-9]{6}" maxlength="6"
+                                class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm tracking-widest font-semibold text-center">
+                        </div>
+                    </div>
+                    
+                    <button type="button" id="regStep2Btn" onclick="verifyVerificationCode()"
+                        class="w-full mt-2 bg-gradient-to-r from-brand to-brand-light text-white font-medium py-3 rounded-xl shadow-lg shadow-brand/20 hover:shadow-brand/35 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer text-sm">
+                        <span id="regStep2BtnText">Verify Code</span>
+                        <i id="regStep2BtnIcon" class="ph ph-shield-check text-lg"></i>
+                    </button>
+                    
+                    <button type="button" onclick="sendVerificationCode()" class="w-full text-center text-brand-light hover:text-white text-xs font-semibold cursor-pointer py-1">
+                        Resend verification code
+                    </button>
+
+                    <button type="button" onclick="goToStep(1)" class="w-full text-center text-neutral-500 hover:text-white text-xs font-semibold cursor-pointer py-1">
+                        Back to Email
+                    </button>
+                </div>
+
+                <!-- STEP 3: Enter Profile Details -->
+                <div id="registerStep3" class="hidden space-y-4">
+                    <!-- Name Field -->
+                    <div>
+                        <label for="regName" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">Full Name</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                                <i class="ph ph-user text-lg"></i>
+                            </span>
+                            <input type="text" id="regName" required placeholder="John Doe" 
+                                class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                        </div>
+                    </div>
+
+                    <!-- Password Field -->
+                    <div>
+                        <label for="regPassword" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">Password</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                                <i class="ph ph-lock text-lg"></i>
+                            </span>
+                            <input type="password" id="regPassword" required placeholder="••••••••" 
+                                class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                        </div>
+                    </div>
+
+                    <!-- Confirm Password Field -->
+                    <div>
+                        <label for="regPasswordConfirm" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">Confirm Password</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                                <i class="ph ph-lock text-lg"></i>
+                            </span>
+                            <input type="password" id="regPasswordConfirm" required placeholder="••••••••" 
+                                class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                        </div>
+                    </div>
+
+                    <!-- Role Selector -->
+                    <div>
+                        <label class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">Account Role</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="regRole" value="cashier" checked class="sr-only peer">
+                                <div class="border border-border-card bg-neutral-900/60 peer-checked:border-brand-light peer-checked:bg-brand/10 rounded-xl py-2.5 px-4 text-center transition-all text-sm font-medium flex items-center justify-center gap-2 text-neutral-300 peer-checked:text-white">
+                                    <i class="ph ph-user text-lg"></i>
+                                    <span>Cashier</span>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="regRole" value="admin" class="sr-only peer">
+                                <div class="border border-border-card bg-neutral-900/60 peer-checked:border-brand-light peer-checked:bg-brand/10 rounded-xl py-2.5 px-4 text-center transition-all text-sm font-medium flex items-center justify-center gap-2 text-neutral-300 peer-checked:text-white">
+                                    <i class="ph ph-shield-check text-lg"></i>
+                                    <span>Admin</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="button" id="regSubmitBtn" onclick="handleRegister()"
+                        class="w-full mt-2 bg-gradient-to-r from-brand to-brand-light text-white font-medium py-3 rounded-xl shadow-lg shadow-brand/20 hover:shadow-brand/35 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer text-sm">
+                        <span id="regBtnText">Create Account</span>
+                        <i id="regBtnIcon" class="ph ph-user-plus text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- Toggle link -->
+                <div class="text-center mt-4" id="regToggleLink">
+                    <span class="text-neutral-500 text-xs">Already have an account?</span>
+                    <button type="button" onclick="toggleForm('login')" class="text-brand-light hover:underline text-xs font-semibold ml-1 cursor-pointer">Sign In</button>
+                </div>
+            </form>
+
+            <!-- Forgot Password Form -->
+            <form id="forgotPasswordForm" class="hidden space-y-5" onsubmit="handleForgotPassword(event)">
+                <div>
+                    <label for="forgotEmail" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-2">Email Address</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                            <i class="ph ph-envelope text-lg"></i>
+                        </span>
+                        <input type="email" id="forgotEmail" required placeholder="name@company.com" 
+                            class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-3 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                    </div>
+                </div>
+
+                <button type="submit" id="forgotSubmitBtn" 
+                    class="w-full mt-2 bg-gradient-to-r from-brand to-brand-light text-white font-medium py-3 rounded-xl shadow-lg shadow-brand/20 hover:shadow-brand/35 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer text-sm">
+                    <span id="forgotBtnText">Send Reset Code</span>
+                    <i id="forgotBtnIcon" class="ph ph-paper-plane text-lg"></i>
+                </button>
+
+                <div class="text-center mt-4">
+                    <button type="button" onclick="toggleForm('login')" class="text-brand-light hover:underline text-xs font-semibold cursor-pointer">Back to Sign In</button>
+                </div>
+            </form>
+
+            <!-- Reset Password Form -->
+            <form id="resetPasswordForm" class="hidden space-y-4" onsubmit="handleResetPassword(event)">
+                <div>
+                    <label class="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-1">Resetting Password For</label>
+                    <div id="resetEmailDisplay" class="text-sm font-semibold text-white bg-neutral-900/40 border border-border-card rounded-xl py-2 px-3">email@example.com</div>
+                </div>
+
+                <div id="resetCodeBanner" class="hidden rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-center space-y-1">
+                    <p class="text-[11px] font-semibold text-amber-200 uppercase tracking-wide">Your reset code</p>
+                    <p id="displayedResetCode" class="text-3xl font-bold font-mono tracking-[0.35em] text-amber-300">000000</p>
+                </div>
+
+                <!-- OTP Code -->
+                <div>
+                    <label for="resetCode" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">6-Digit Reset Code</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                            <i class="ph ph-key text-lg"></i>
+                        </span>
+                        <input type="text" id="resetCode" required placeholder="123456" pattern="[0-9]{6}" maxlength="6"
+                            class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm tracking-widest font-semibold text-center">
+                    </div>
+                </div>
+
+                <!-- New Password Field -->
+                <div>
+                    <label for="resetPassword" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">New Password</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                            <i class="ph ph-lock text-lg"></i>
+                        </span>
+                        <input type="password" id="resetPassword" required placeholder="••••••••" 
+                            class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                    </div>
+                </div>
+
+                <!-- Confirm Password Field -->
+                <div>
+                    <label for="resetPasswordConfirm" class="block text-xs font-semibold text-neutral-300 uppercase tracking-wider mb-1.5">Confirm New Password</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-neutral-500">
+                            <i class="ph ph-lock text-lg"></i>
+                        </span>
+                        <input type="password" id="resetPasswordConfirm" required placeholder="••••••••" 
+                            class="w-full bg-neutral-900/60 border border-border-card rounded-xl py-2.5 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light transition-all text-sm">
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" id="resetSubmitBtn" 
+                    class="w-full mt-2 bg-gradient-to-r from-brand to-brand-light text-white font-medium py-3 rounded-xl shadow-lg shadow-brand/20 hover:shadow-brand/35 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer text-sm">
+                    <span id="resetBtnText">Reset Password</span>
+                    <i id="resetBtnIcon" class="ph ph-check-circle text-lg"></i>
+                </button>
+
+                <div class="text-center mt-4">
+                    <button type="button" onclick="toggleForm('login')" class="text-brand-light hover:underline text-xs font-semibold cursor-pointer">Back to Sign In</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Help Info / Demo Credentials Guide -->
+        <div class="text-center mt-6 text-xs text-neutral-500">
+            <p>Demo Accounts:</p>
+            <div class="flex justify-center gap-4 mt-2">
+                <span>Admin: <strong class="text-neutral-400">admin@pos.com</strong></span>
+                <span>Cashier: <strong class="text-neutral-400">cashier1@pos.com</strong></span>
+            </div>
+            <p class="mt-1">Password: <strong class="text-neutral-400">password</strong></p>
+        </div>
+    </div>
+
+    <!-- Login Request Handlers -->
+    <script>
+        const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8000' : '';
+
+        // Show warning banner if opened via file protocol
+        if (window.location.protocol === 'file:') {
+            document.addEventListener('DOMContentLoaded', () => {
+                const banner = document.getElementById('protocol-warning-banner');
+                if (banner) banner.classList.remove('hidden');
+            });
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMessage = document.getElementById('errorMessage');
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            const btnIcon = document.getElementById('btnIcon');
+
+            // Set loading state
+            submitBtn.disabled = true;
+            btnText.textContent = 'Authenticating...';
+            btnIcon.className = 'ph ph-circle-notch animate-spin text-lg';
+            errorAlert.classList.add('hidden');
+
+            try {
+                // Determine whether to use api/v1/login or fallback to mock for testing without backend active
+                const response = await fetch(API_BASE + '/api/v1/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: emailInput.value,
+                        password: passwordInput.value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Success!
+                    localStorage.setItem('pos_token', data.token);
+                    localStorage.setItem('pos_role', data.role);
+
+                    btnText.textContent = 'Access Granted!';
+                    btnIcon.className = 'ph ph-check text-lg text-green-400';
+                    submitBtn.classList.remove('from-brand', 'to-brand-light');
+                    submitBtn.classList.add('from-green-600', 'to-green-500');
+
+                    setTimeout(() => {
+                        if (data.role === 'admin') {
+                            window.location.href = './admin.html';
+                        } else {
+                            window.location.href = './pos.html';
+                        }
+                    }, 800);
+
+                } else {
+                    // Backend validation or credentials error
+                    throw new Error(data.message || 'Authentication failed. Please verify your credentials.');
+                }
+            } catch (err) {
+                console.error(err);
+                
+                // Check if backend is completely down (offline mock fallback for developers)
+                if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                    // Development offline helper: authenticate using local mock check if backend is not running
+                    const email = emailInput.value.trim().toLowerCase();
+                    const password = passwordInput.value;
+
+                    if (password === 'password') {
+                        let role = '';
+                        if (email === 'admin@pos.com') role = 'admin';
+                        else if (email === 'cashier1@pos.com') role = 'cashier';
+
+                        if (role) {
+                            localStorage.setItem('pos_token', 'mock_token_' + role + '_' + Date.now());
+                            localStorage.setItem('pos_role', role);
+
+                            btnText.textContent = 'Bypassed (Dev mode)';
+                            btnIcon.className = 'ph ph-check text-lg text-amber-400';
+                            submitBtn.classList.remove('from-brand', 'to-brand-light');
+                            submitBtn.classList.add('from-amber-600', 'to-amber-500');
+
+                            setTimeout(() => {
+                                if (role === 'admin') {
+                                    window.location.href = './admin.html';
+                                } else {
+                                    window.location.href = './pos.html';
+                                }
+                            }, 800);
+                            return;
+                        }
+                    }
+                    errorMessage.textContent = 'Backend server offline. Verify connection or use default credentials to bypass.';
+                } else {
+                    errorMessage.textContent = err.message;
+                }
+                
+                errorAlert.classList.remove('hidden');
+                
+                // Reset submit button state
+                submitBtn.disabled = false;
+                btnText.textContent = 'Sign In';
+                btnIcon.className = 'ph ph-arrow-right text-lg';
+            }
+        }
+
+        function toggleForm(mode) {
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+            const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+            const resetPasswordForm = document.getElementById('resetPasswordForm');
+            const portalSubtitle = document.getElementById('portalSubtitle');
+            const errorAlert = document.getElementById('errorAlert');
+
+            errorAlert.classList.add('hidden');
+
+            // Hide all first
+            loginForm.classList.add('hidden');
+            registerForm.classList.add('hidden');
+            if (forgotPasswordForm) forgotPasswordForm.classList.add('hidden');
+            if (resetPasswordForm) resetPasswordForm.classList.add('hidden');
+
+            if (mode === 'register') {
+                registerForm.classList.remove('hidden');
+                portalSubtitle.textContent = 'Create your point of sale account';
+                goToStep(1); // Ensure we start at Step 1
+            } else if (mode === 'forgot') {
+                if (forgotPasswordForm) forgotPasswordForm.classList.remove('hidden');
+                portalSubtitle.textContent = 'Recover your account password';
+            } else if (mode === 'reset') {
+                if (resetPasswordForm) resetPasswordForm.classList.remove('hidden');
+                portalSubtitle.textContent = 'Enter new account password';
+            } else {
+                loginForm.classList.remove('hidden');
+                portalSubtitle.textContent = 'Sign in to your point of sale terminal';
+            }
+        }
+
+        let currentStep = 1;
+        function goToStep(step) {
+            currentStep = step;
+            
+            const step1 = document.getElementById('registerStep1');
+            const step2 = document.getElementById('registerStep2');
+            const step3 = document.getElementById('registerStep3');
+            const toggleLink = document.getElementById('regToggleLink');
+            
+            const ind1 = document.getElementById('step1Indicator');
+            const ind2 = document.getElementById('step2Indicator');
+            const ind3 = document.getElementById('step3Indicator');
+            
+            const line1 = document.getElementById('stepLine1');
+            const line2 = document.getElementById('stepLine2');
+
+            // Hide all steps
+            step1.classList.add('hidden');
+            step2.classList.add('hidden');
+            step3.classList.add('hidden');
+
+            // Show current step
+            if (step === 1) {
+                step1.classList.remove('hidden');
+                toggleLink.classList.remove('hidden');
+                
+                // Indicators: step 1 active, others inactive
+                ind1.className = "w-8 h-8 rounded-full bg-brand flex items-center justify-center text-xs font-bold text-white border-2 border-brand transition-all duration-300";
+                ind2.className = "w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center text-xs font-bold text-neutral-500 border border-border-card transition-all duration-300";
+                ind3.className = "w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center text-xs font-bold text-neutral-500 border border-border-card transition-all duration-300";
+                
+                line1.className = "flex-1 h-0.5 bg-neutral-800 mx-2 transition-all duration-300";
+                line2.className = "flex-1 h-0.5 bg-neutral-800 mx-2 transition-all duration-300";
+            } else if (step === 2) {
+                step2.classList.remove('hidden');
+                toggleLink.classList.add('hidden'); // hide login link when verification in progress
+                
+                // Indicators: step 1 done (green), step 2 active, step 3 inactive
+                ind1.className = "w-8 h-8 rounded-full bg-green-600/30 flex items-center justify-center text-xs font-bold text-green-400 border border-green-500/30 transition-all duration-300";
+                ind2.className = "w-8 h-8 rounded-full bg-brand flex items-center justify-center text-xs font-bold text-white border-2 border-brand transition-all duration-300";
+                ind3.className = "w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center text-xs font-bold text-neutral-500 border border-border-card transition-all duration-300";
+                
+                line1.className = "flex-1 h-0.5 bg-brand-light mx-2 transition-all duration-300";
+                line2.className = "flex-1 h-0.5 bg-neutral-800 mx-2 transition-all duration-300";
+            } else if (step === 3) {
+                step3.classList.remove('hidden');
+                toggleLink.classList.add('hidden');
+                
+                // Indicators: step 1 & 2 done, step 3 active
+                ind1.className = "w-8 h-8 rounded-full bg-green-600/30 flex items-center justify-center text-xs font-bold text-green-400 border border-green-500/30 transition-all duration-300";
+                ind2.className = "w-8 h-8 rounded-full bg-green-600/30 flex items-center justify-center text-xs font-bold text-green-400 border border-green-500/30 transition-all duration-300";
+                ind3.className = "w-8 h-8 rounded-full bg-brand flex items-center justify-center text-xs font-bold text-white border-2 border-brand transition-all duration-300";
+                
+                line1.className = "flex-1 h-0.5 bg-green-600/40 mx-2 transition-all duration-300";
+                line2.className = "flex-1 h-0.5 bg-brand-light mx-2 transition-all duration-300";
+            }
+        }
+
+        function showVerificationCodeDelivery(data) {
+            const code = data.verification_code || data.code;
+            const banner = document.getElementById('verificationCodeBanner');
+            const emailHint = document.getElementById('emailSentHint');
+            const codeDisplay = document.getElementById('displayedVerificationCode');
+            const codeInput = document.getElementById('regVerificationCode');
+
+            if (code) {
+                if (codeDisplay) codeDisplay.textContent = code;
+                if (codeInput && !codeInput.value) codeInput.value = code;
+                banner?.classList.remove('hidden');
+                emailHint?.classList.add('hidden');
+            } else if (data.email_sent) {
+                banner?.classList.add('hidden');
+                emailHint?.classList.remove('hidden');
+            } else {
+                banner?.classList.add('hidden');
+                emailHint?.classList.add('hidden');
+            }
+        }
+
+        async function sendVerificationCode() {
+            const emailInput = document.getElementById('regEmail');
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMessage = document.getElementById('errorMessage');
+            const step1Btn = document.getElementById('regStep1Btn');
+            const step2Btn = document.getElementById('regStep2Btn');
+            const btnText = document.getElementById('regStep1BtnText');
+            const btnIcon = document.getElementById('regStep1BtnIcon');
+            const onStep2 = !document.getElementById('registerStep2').classList.contains('hidden');
+
+            if (!emailInput.reportValidity()) return;
+
+            errorAlert.classList.add('hidden');
+            if (step1Btn) {
+                step1Btn.disabled = true;
+                btnText.textContent = 'Sending...';
+                btnIcon.className = 'ph ph-circle-notch animate-spin text-lg';
+            }
+            if (onStep2 && step2Btn) step2Btn.disabled = true;
+
+            try {
+                const response = await fetch(API_BASE + '/api/v1/register/send-code', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ email: emailInput.value })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('regEmailDisplay').textContent = emailInput.value;
+                    showVerificationCodeDelivery(data);
+                    if (!onStep2) goToStep(2);
+                } else {
+                    throw new Error(data.message || 'Failed to send verification code.');
+                }
+            } catch (err) {
+                console.error(err);
+
+                if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                    errorMessage.textContent = 'Cannot reach the server. Start the Laravel backend (php artisan serve) and try again.';
+                    errorAlert.classList.remove('hidden');
+                } else {
+                    errorMessage.textContent = err.message;
+                    errorAlert.classList.remove('hidden');
+                }
+            } finally {
+                if (step1Btn) {
+                    step1Btn.disabled = false;
+                    btnText.textContent = 'Send Verification Code';
+                    btnIcon.className = 'ph ph-paper-plane text-lg';
+                }
+                if (step2Btn) step2Btn.disabled = false;
+            }
+        }
+
+        async function verifyVerificationCode() {
+            const emailInput = document.getElementById('regEmail');
+            const codeInput = document.getElementById('regVerificationCode');
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMessage = document.getElementById('errorMessage');
+            const step2Btn = document.getElementById('regStep2Btn');
+            const btnText = document.getElementById('regStep2BtnText');
+            const btnIcon = document.getElementById('regStep2BtnIcon');
+
+            if (!codeInput.reportValidity()) return;
+
+            errorAlert.classList.add('hidden');
+            step2Btn.disabled = true;
+            btnText.textContent = 'Verifying...';
+            btnIcon.className = 'ph ph-circle-notch animate-spin text-lg';
+
+            try {
+                const response = await fetch(API_BASE + '/api/v1/register/verify-code', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: emailInput.value,
+                        code: codeInput.value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    goToStep(3);
+                } else {
+                    throw new Error(data.message || 'Invalid verification code.');
+                }
+            } catch (err) {
+                console.error(err);
+                if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                    // Offline fallback: permit 123456
+                    if (codeInput.value === '123456') {
+                        goToStep(3);
+                    } else {
+                        errorMessage.textContent = 'Invalid verification code (mock: use 123456).';
+                        errorAlert.classList.remove('hidden');
+                    }
+                } else {
+                    errorMessage.textContent = err.message;
+                    errorAlert.classList.remove('hidden');
+                }
+            } finally {
+                step2Btn.disabled = false;
+                btnText.textContent = 'Verify Code';
+                btnIcon.className = 'ph ph-shield-check text-lg';
+            }
+        }
+
+        async function handleRegister() {
+            const nameInput = document.getElementById('regName');
+            const emailInput = document.getElementById('regEmail');
+            const passwordInput = document.getElementById('regPassword');
+            const passwordConfirmInput = document.getElementById('regPasswordConfirm');
+            const roleInput = document.querySelector('input[name="regRole"]:checked');
+            const codeInput = document.getElementById('regVerificationCode');
+            
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMessage = document.getElementById('errorMessage');
+            const submitBtn = document.getElementById('regSubmitBtn');
+            const btnText = document.getElementById('regBtnText');
+            const btnIcon = document.getElementById('regBtnIcon');
+
+            // Form validity checks
+            if (!nameInput.reportValidity() || !passwordInput.reportValidity() || !passwordConfirmInput.reportValidity()) return;
+
+            // Validate Passwords
+            if (passwordInput.value !== passwordConfirmInput.value) {
+                errorMessage.textContent = 'Passwords do not match.';
+                errorAlert.classList.remove('hidden');
+                return;
+            }
+
+            if (passwordInput.value.length < 8) {
+                errorMessage.textContent = 'Password must be at least 8 characters long.';
+                errorAlert.classList.remove('hidden');
+                return;
+            }
+
+            // Set loading state
+            submitBtn.disabled = true;
+            btnText.textContent = 'Creating Account...';
+            btnIcon.className = 'ph ph-circle-notch animate-spin text-lg';
+            errorAlert.classList.add('hidden');
+
+            const payload = {
+                name: nameInput.value,
+                email: emailInput.value,
+                password: passwordInput.value,
+                password_confirmation: passwordConfirmInput.value,
+                role: roleInput.value,
+                verification_code: codeInput.value
+            };
+
+            try {
+                const response = await fetch(API_BASE + '/api/v1/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Success! Auto-login
+                    localStorage.setItem('pos_token', data.token);
+                    localStorage.setItem('pos_role', data.role);
+
+                    btnText.textContent = 'Account Created!';
+                    btnIcon.className = 'ph ph-check text-lg text-green-400';
+                    submitBtn.classList.remove('from-brand', 'to-brand-light');
+                    submitBtn.classList.add('from-green-600', 'to-green-500');
+
+                    setTimeout(() => {
+                        if (data.role === 'admin') {
+                            window.location.href = './admin.html';
+                        } else {
+                            window.location.href = './pos.html';
+                        }
+                    }, 800);
+
+                } else {
+                    // Validation or error from backend
+                    if (data.errors) {
+                        const allErrors = Object.values(data.errors).flat().join(' ');
+                        throw new Error(allErrors);
+                    }
+                    throw new Error(data.message || 'Registration failed.');
+                }
+            } catch (err) {
+                console.error(err);
+
+                // Offline dev mock fallback
+                if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                    const role = roleInput.value;
+                    localStorage.setItem('pos_token', 'mock_token_' + role + '_' + Date.now());
+                    localStorage.setItem('pos_role', role);
+
+                    btnText.textContent = 'Account Mocked (Dev Mode)';
+                    btnIcon.className = 'ph ph-check text-lg text-amber-400';
+                    submitBtn.classList.remove('from-brand', 'to-brand-light');
+                    submitBtn.classList.add('from-amber-600', 'to-amber-500');
+
+                    setTimeout(() => {
+                        if (role === 'admin') {
+                            window.location.href = './admin.html';
+                        } else {
+                            window.location.href = './pos.html';
+                        }
+                    }, 800);
+                } else {
+                    errorMessage.textContent = err.message;
+                    errorAlert.classList.remove('hidden');
+                    
+                    // Reset submit button state
+                    submitBtn.disabled = false;
+                    btnText.textContent = 'Create Account';
+                    btnIcon.className = 'ph ph-user-plus text-lg';
+                }
+            }
+        }
+
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+
+            const emailInput = document.getElementById('forgotEmail');
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMessage = document.getElementById('errorMessage');
+            const forgotSubmitBtn = document.getElementById('forgotSubmitBtn');
+            const btnText = document.getElementById('forgotBtnText');
+            const btnIcon = document.getElementById('forgotBtnIcon');
+
+            errorAlert.classList.add('hidden');
+            forgotSubmitBtn.disabled = true;
+            btnText.textContent = 'Sending Code...';
+            btnIcon.className = 'ph ph-circle-notch animate-spin text-lg';
+
+            try {
+                const response = await fetch(API_BASE + '/api/v1/forgot-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ email: emailInput.value })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('resetEmailDisplay').textContent = emailInput.value;
+                    const resetCode = data.verification_code || data.code;
+                    const resetBanner = document.getElementById('resetCodeBanner');
+                    if (resetCode) {
+                        document.getElementById('displayedResetCode').textContent = resetCode;
+                        document.getElementById('resetCode').value = resetCode;
+                        resetBanner?.classList.remove('hidden');
+                    } else {
+                        resetBanner?.classList.add('hidden');
+                    }
+                    toggleForm('reset');
+                } else {
+                    throw new Error(data.message || 'Failed to send reset code.');
+                }
+            } catch (err) {
+                console.error(err);
+
+                if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                    errorMessage.textContent = 'Cannot reach the server. Start the Laravel backend and try again.';
+                    errorAlert.classList.remove('hidden');
+                } else {
+                    errorMessage.textContent = err.message;
+                    errorAlert.classList.remove('hidden');
+                }
+            } finally {
+                forgotSubmitBtn.disabled = false;
+                btnText.textContent = 'Send Reset Code';
+                btnIcon.className = 'ph ph-paper-plane text-lg';
+            }
+        }
+
+        async function handleResetPassword(e) {
+            e.preventDefault();
+
+            const email = document.getElementById('resetEmailDisplay').textContent;
+            const codeInput = document.getElementById('resetCode');
+            const passwordInput = document.getElementById('resetPassword');
+            const passwordConfirmInput = document.getElementById('resetPasswordConfirm');
+
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMessage = document.getElementById('errorMessage');
+            const resetSubmitBtn = document.getElementById('resetSubmitBtn');
+            const btnText = document.getElementById('resetBtnText');
+            const btnIcon = document.getElementById('resetBtnIcon');
+
+            // Validate Passwords
+            if (passwordInput.value !== passwordConfirmInput.value) {
+                errorMessage.textContent = 'Passwords do not match.';
+                errorAlert.classList.remove('hidden');
+                return;
+            }
+
+            if (passwordInput.value.length < 8) {
+                errorMessage.textContent = 'Password must be at least 8 characters long.';
+                errorAlert.classList.remove('hidden');
+                return;
+            }
+
+            errorAlert.classList.add('hidden');
+            resetSubmitBtn.disabled = true;
+            btnText.textContent = 'Resetting Password...';
+            btnIcon.className = 'ph ph-circle-notch animate-spin text-lg';
+
+            const payload = {
+                email: email,
+                code: codeInput.value,
+                password: passwordInput.value,
+                password_confirmation: passwordConfirmInput.value
+            };
+
+            try {
+                const response = await fetch(API_BASE + '/api/v1/reset-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    btnText.textContent = 'Password Reset!';
+                    btnIcon.className = 'ph ph-check text-lg text-green-400';
+                    resetSubmitBtn.classList.remove('from-brand', 'to-brand-light');
+                    resetSubmitBtn.classList.add('from-green-600', 'to-green-500');
+
+                    setTimeout(() => {
+                        resetSubmitBtn.classList.add('from-brand', 'to-brand-light');
+                        resetSubmitBtn.classList.remove('from-green-600', 'to-green-500');
+                        toggleForm('login');
+                    }, 1200);
+                } else {
+                    throw new Error(data.message || 'Failed to reset password.');
+                }
+            } catch (err) {
+                console.error(err);
+
+                if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                    // Offline fallback
+                    btnText.textContent = 'Password Mock Reset!';
+                    btnIcon.className = 'ph ph-check text-lg text-amber-400';
+                    resetSubmitBtn.classList.remove('from-brand', 'to-brand-light');
+                    resetSubmitBtn.classList.add('from-amber-600', 'to-amber-500');
+
+                    setTimeout(() => {
+                        resetSubmitBtn.classList.add('from-brand', 'to-brand-light');
+                        resetSubmitBtn.classList.remove('from-amber-600', 'to-amber-500');
+                        toggleForm('login');
+                    }, 1200);
+                } else {
+                    errorMessage.textContent = err.message;
+                    errorAlert.classList.remove('hidden');
+                    
+                    resetSubmitBtn.disabled = false;
+                    btnText.textContent = 'Reset Password';
+                    btnIcon.className = 'ph ph-check-circle text-lg';
+                }
+            }
+        }
+    </script>
+</body>
+</html>
