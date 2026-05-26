@@ -83,7 +83,7 @@ class MPesaGateway implements PaymentGatewayInterface
             'Password' => $password,
             'Timestamp' => $timestamp,
             'TransactionType' => 'CustomerPayBillOnline',
-            'Amount' => (int) $amount,
+            'Amount' => max(1, (int) round($amount)),
             'PartyA' => $formattedPhone,
             'PartyB' => $this->shortcode,
             'PhoneNumber' => $formattedPhone,
@@ -95,6 +95,10 @@ class MPesaGateway implements PaymentGatewayInterface
         Log::info('Initiating M-Pesa STK Push', ['payload' => $payload]);
 
         $response = Http::withToken($accessToken)
+            ->withHeaders([
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept' => 'application/json',
+            ])
             ->post($this->baseUrl . '/mpesa/stkpush/v1/processrequest', $payload);
 
         if (!$response->successful()) {
@@ -132,20 +136,28 @@ class MPesaGateway implements PaymentGatewayInterface
      */
     protected function generateAccessToken(): string
     {
-        $url = $this->baseUrl . '/oauth/v1/generate?grant_type=client_credentials';
-        
-        $response = Http::withBasicAuth($this->consumerKey, $this->consumerSecret)
-            ->get($url);
+        $cacheKey = 'mpesa_access_token_' . md5($this->consumerKey . $this->consumerSecret . $this->baseUrl);
 
-        if (!$response->successful()) {
-            Log::error('M-Pesa OAuth Error', [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-            throw new Exception("Failed to generate M-Pesa Access Token.");
-        }
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 3000, function () {
+            $url = $this->baseUrl . '/oauth/v1/generate?grant_type=client_credentials';
+            
+            $response = Http::withBasicAuth($this->consumerKey, $this->consumerSecret)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept' => 'application/json',
+                ])
+                ->get($url);
 
-        return $response->json('access_token');
+            if (!$response->successful()) {
+                Log::error('M-Pesa OAuth Error', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+                throw new Exception("Failed to generate M-Pesa Access Token.");
+            }
+
+            return $response->json('access_token');
+        });
     }
 
     /**
@@ -183,6 +195,10 @@ class MPesaGateway implements PaymentGatewayInterface
             $password = base64_encode($this->shortcode . $this->passkey . $timestamp);
 
             $response = Http::withToken($accessToken)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept' => 'application/json',
+                ])
                 ->post($this->baseUrl . '/mpesa/stkpushquery/v1/query', [
                     'BusinessShortCode' => $this->shortcode,
                     'Password' => $password,

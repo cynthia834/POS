@@ -1352,7 +1352,7 @@
                                     </div>
 
                                     <!-- Cart Items Container -->
-                                    <div id="pos-cart-container" class="overflow-y-auto max-h-[220px] space-y-2.5 pr-1">
+                                    <div id="pos-cart-container" class="overflow-y-auto max-h-[480px] space-y-2.5 pr-1">
                                         <!-- Populate cart items here -->
                                     </div>
                                 </div>
@@ -2288,7 +2288,7 @@
         }
 
         function openEditItemModal(itemId) {
-            const item = itemsDatabase.find(i => i.id === itemId);
+            const item = itemsDatabase.find(i => String(i.id) === String(itemId));
             if (!item) return;
             
             editingItemId = itemId;
@@ -2639,10 +2639,10 @@
                         </td>
                         <td class="py-3.5 px-6 text-right">
                             <div class="flex items-center justify-end gap-2">
-                                <button onclick="openEditItemModal(${item.id})" class="p-1.5 rounded-lg border border-neutral-850 bg-neutral-900 hover:bg-neutral-850 hover:text-white text-neutral-300 transition-colors cursor-pointer" title="Edit Item">
+                                <button onclick="openEditItemModal('${item.id}')" class="p-1.5 rounded-lg border border-neutral-850 bg-neutral-900 hover:bg-neutral-850 hover:text-white text-neutral-300 transition-colors cursor-pointer" title="Edit Item">
                                     <i class="ph ph-note-pencil text-sm"></i>
                                 </button>
-                                <button onclick="quickRestockItem(${item.id})" class="px-2.5 py-1 text-[10px] font-bold rounded-lg border border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white transition-all cursor-pointer">
+                                <button onclick="quickRestockItem('${item.id}')" class="px-2.5 py-1 text-[10px] font-bold rounded-lg border border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white transition-all cursor-pointer">
                                     +30 Restock
                                 </button>
                             </div>
@@ -3117,9 +3117,36 @@ ${listItemsStr}
                     </div>
                 `;
             }).join('');
-        }        function addToPOSCart(itemId) {
+        }
+
+        function playBeepSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(1500, audioCtx.currentTime); // 1500Hz supermarket scanner pitch
+                gainNode.gain.setValueAtTime(0.18, audioCtx.currentTime); // high audibility
+                
+                oscillator.start();
+                gainNode.gain.setValueAtTime(0.18, audioCtx.currentTime + 0.05);
+                gainNode.gain.linearRampToValueAtTime(0.0, audioCtx.currentTime + 0.055);
+                oscillator.stop(audioCtx.currentTime + 0.055);
+            } catch (e) {
+                console.error("Audio Context beep error:", e);
+            }
+        }
+
+        function addToPOSCart(itemId) {
             const item = itemsDatabase.find(i => i.id === itemId);
             if (!item || item.stock <= 0) return;
+            
+            // Play barcode scanner sound
+            playBeepSound();
             
             const existing = posCart.find(c => c.id === itemId);
             if (existing) {
@@ -3592,11 +3619,14 @@ ${listItemsStr}
                 if (cust) customerId = cust.id;
             }
 
+            const envVal = document.getElementById('settings-mpesa-env') ? document.getElementById('settings-mpesa-env').value : '';
+            const isSimulate = envVal.includes('Simulation') || envVal.includes('Testing');
+
             const payload = {
                 payment_method: 'mpesa',
                 phone_number: cleanPhone,
                 customer_id: customerId,
-                simulate: false,
+                simulate: isSimulate,
                 cart: {
                     items: posCart.map(c => ({
                         id: c.id,
