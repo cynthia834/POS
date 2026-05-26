@@ -220,6 +220,55 @@
         .pulse-dot-amber {
             animation: pulse-glow-amber 2s infinite ease-in-out;
         }
+
+        /* Subtle Custom Keyframe Animations */
+        @keyframes slide-in-right {
+            from {
+                opacity: 0;
+                transform: translateX(16px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        @keyframes fade-in-up {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes scale-up {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        @keyframes pop-scale {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
+        .animate-slide-in {
+            animation: slide-in-right 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        .animate-fade-up {
+            animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .animate-scale-up {
+            animation: scale-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        .animate-pop {
+            animation: pop-scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
     </style>
 </head>
 <body class="h-full bg-bg-base text-neutral-200 font-sans antialiased overflow-x-hidden selection:bg-brand selection:text-white">
@@ -2460,7 +2509,12 @@
             
             // Reveal selected view
             const activeSection = document.getElementById(`view-${tabId}`);
-            if (activeSection) activeSection.classList.remove('hidden');
+            if (activeSection) {
+                activeSection.classList.remove('hidden');
+                activeSection.classList.remove('animate-fade-up');
+                void activeSection.offsetWidth; // Force reflow
+                activeSection.classList.add('animate-fade-up');
+            }
             
             // Apply active styles to the clicked button
             const activeBtn = document.getElementById(`nav-${tabId}`);
@@ -3569,7 +3623,7 @@ ${listItemsStr}
                 const pImg = (item && item.image_url) ? item.image_url : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=120&auto=format&fit=crop&q=60';
                 const notesHtml = c.notes ? `<p class="text-[10px] text-amber-650 bg-amber-50 rounded-xl px-2.5 py-1 mt-1.5 border border-amber-100 flex items-start gap-1"><i class="ph ph-note text-xs mt-0.5 flex-shrink-0"></i> <span class="break-all leading-tight">${c.notes}</span></p>` : '';
                 return `
-                    <div class="flex items-start justify-between p-3 bg-neutral-50 border border-neutral-200/60 rounded-2xl gap-3 transition-colors hover:bg-neutral-100/50">
+                    <div class="flex items-start justify-between p-3 bg-neutral-50 border border-neutral-200/60 rounded-2xl gap-3 transition-all hover:bg-neutral-100/50 animate-slide-in">
                         <div class="flex items-start gap-2.5 flex-1 min-w-0">
                             <div class="w-10 h-10 rounded-full overflow-hidden bg-neutral-100 border border-neutral-200/80 flex-shrink-0">
                                 <img src="${pImg}" alt="${c.name}" class="w-full h-full object-cover">
